@@ -1319,6 +1319,17 @@ handleInput.addEventListener('focus', () => {
   if (!handleInput.value) handleInput.placeholder = '@username@mastodon.social';
 });
 
+// ── URL-based handle lookup ────────────────────────────────────────────────────
+// Supports paths like /@username@domain.tld
+(function () {
+  const pathMatch = window.location.pathname.match(/^\/@?([^@\/\s]+)@([^@\/\s]+)\/?$/);
+  if (pathMatch) {
+    const handle = `@${pathMatch[1]}@${pathMatch[2]}`;
+    handleInput.value = handle;
+    run(handle);
+  }
+})();
+
 </script>
 </body>
 </html>
