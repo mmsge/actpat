@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>actpat — ActivityPub Account Stats</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --bg2: #1a1d27;
+      --bg3: #242837;
+      --border: #2e3347;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --error: #ef4444;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 16px 24px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent2);
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+    }
+    .logo span { color: var(--text3); font-weight: 400; font-size: 0.85rem; margin-left: 6px; }
+    #search-form {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      min-width: 260px;
+    }
+    #handle-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #handle-input:focus { border-color: var(--accent); }
+    #handle-input::placeholder { color: var(--text3); }
+    #search-btn {
+      padding: 10px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      white-space: nowrap;
+    }
+    #search-btn:hover { background: var(--accent2); }
+    #search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #stop-btn {
+      padding: 10px 16px;
+      background: transparent;
+      color: var(--error);
+      border: 1px solid var(--error);
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: none;
+    }
+    #stop-btn.visible { display: inline-block; }
+
+    /* ── Main layout ── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    /* ── Stats Panel ── */
+    #stats-panel {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 20px;
+    }
+    #stats-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 300px;
+      text-align: center;
+      color: var(--text3);
+      gap: 12px;
+    }
+    #stats-empty svg { opacity: 0.3; }
+    .profile-header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .profile-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--bg3);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .profile-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+    .profile-handle { color: var(--text3); font-size: 0.82rem; margin-top: 2px; word-break: break-all; }
+    .profile-instance {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg3);
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      color: var(--accent2);
+      margin-top: 4px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-card.wide { grid-column: span 2; }
+    .stat-icon { font-size: 1.1rem; }
+    .stat-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+    .stat-label { font-size: 0.72rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-sub { font-size: 0.78rem; color: var(--text2); }
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text3);
+      margin: 16px 0 8px;
+    }
+
+    /* ── Graph Panel ── */
+    #graph-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+    }
+    #graph-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .toolbar-btn {
+      padding: 5px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text2);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .toolbar-btn:hover { border-color: var(--accent); color: var(--accent2); }
+    #graph-status { font-size: 0.82rem; color: var(--text3); margin-left: auto; }
+    #graph-svg-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #graph-svg {
+      width: 100%;
+      height: 100%;
+    }
+    #graph-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text3);
+      gap: 12px;
+      pointer-events: none;
+    }
+    #graph-empty svg { opacity: 0.25; }
+    #graph-empty p { font-size: 0.9rem; }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 1000;
+      max-width: 220px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #tooltip.visible { opacity: 1; }
+    .tt-name { font-weight: 700; margin-bottom: 2px; }
+    .tt-handle { color: var(--text3); font-size: 0.75rem; word-break: break-all; }
+    .tt-stats { margin-top: 6px; display: flex; gap: 10px; }
+    .tt-stat { text-align: center; }
+    .tt-stat-v { font-weight: 700; color: var(--accent2); }
+    .tt-stat-l { font-size: 0.7rem; color: var(--text3); }
+
+    /* ── Cluster Legend ── */
+    #cluster-legend {
+      padding: 8px 16px;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #cluster-legend:empty { display: none; }
+    .legend-label { font-size: 0.72rem; color: var(--text3); margin-right: 4px; }
+    .cluster-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .cluster-chip .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .cluster-chip.dimmed { opacity: 0.35; }
+
+    /* ── Footer / Log ── */
+    #footer {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+    }
+    #footer-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #progress-bar-wrap {
+      flex: 1;
+      height: 6px;
+      background: var(--bg3);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    #progress-label { font-size: 0.78rem; color: var(--text3); min-width: 200px; text-align: right; }
+    #log-chevron { color: var(--text3); font-size: 0.8rem; transition: transform 0.2s; }
+    #log-chevron.open { transform: rotate(180deg); }
+    #log-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s;
+    }
+    #log-panel.open { max-height: 180px; overflow-y: auto; }
+    #log-list {
+      padding: 0 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .log-entry {
+      font-size: 0.75rem;
+      font-family: 'Courier New', monospace;
+      color: var(--text2);
+      padding: 1px 0;
+    }
+    .log-entry.error { color: var(--error); }
+    .log-entry.warn { color: var(--warn); }
+    .log-entry.success { color: var(--success); }
+
+    /* ── Loading overlay on graph ── */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15,17,23,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    #loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">actpat <span>ActivityPub stats</span></div>
+  <form id="search-form">
+    <input id="handle-input" type="text" placeholder="@username@mastodon.social" autocomplete="off" spellcheck="false">
+    <button id="search-btn" type="submit">Explore</button>
+    <button id="stop-btn" type="button">Stop</button>
+  </form>
+</header>
+
+<main>
+  <section id="stats-panel">
+    <div id="stats-empty">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="28" stroke="#6366f1" stroke-width="2"/>
+        <circle cx="32" cy="24" r="8" stroke="#6366f1" stroke-width="2"/>
+        <path d="M16 48c0-8.837 7.163-16 16-16s16 7.163 16 16" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p>Enter an ActivityPub handle to explore</p>
+    </div>
+    <div id="stats-content" style="display:none"></div>
+  </section>
+
+  <section id="graph-panel">
+    <div id="graph-toolbar" style="display:none">
+      <button class="toolbar-btn" id="btn-pause">⏸ Pause</button>
+      <button class="toolbar-btn" id="btn-reset-zoom">⊕ Reset zoom</button>
+      <button class="toolbar-btn" id="btn-labels">Labels off</button>
+      <span id="graph-status"></span>
+    </div>
+    <div id="graph-svg-wrap">
+      <div id="graph-empty">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+          <circle cx="20" cy="40" r="8" stroke="#6366f1" stroke-width="2"/>
+          <circle cx="60" cy="20" r="8" stroke="#6366f1" stroke-width="2"/>
+          <circle cx="60" cy="60" r="8" stroke="#6366f1" stroke-width="2"/>
+          <line x1="28" y1="38" x2="52" y2="24" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line x1="28" y1="42" x2="52" y2="56" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4 3"/>
+        </svg>
+        <p>The follower graph will appear here</p>
+      </div>
+      <svg id="graph-svg"></svg>
+      <div id="loading-overlay"><div class="spinner"></div></div>
+    </div>
+    <div id="cluster-legend"></div>
+  </section>
+</main>
+
+<footer id="footer">
+  <div id="footer-toggle">
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+    <div id="progress-label">Ready</div>
+    <span id="log-chevron">▲</span>
+  </div>
+  <div id="log-panel">
+    <div id="log-list"></div>
+  </div>
+</footer>
+
+<div id="tooltip">
+  <div class="tt-name" id="tt-name"></div>
+  <div class="tt-handle" id="tt-handle"></div>
+  <div class="tt-stats">
+    <div class="tt-stat"><div class="tt-stat-v" id="tt-followers"></div><div class="tt-stat-l">followers</div></div>
+    <div class="tt-stat"><div class="tt-stat-v" id="tt-following"></div><div class="tt-stat-l">following</div></div>
+    <div class="tt-stat"><div class="tt-stat-v" id="tt-posts"></div><div class="tt-stat-l">posts</div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const MAX_NODES = 200;
+const SEED_FOLLOWERS_LIMIT = 80;
+const HOP2_FOLLOWERS_LIMIT = 40;
+const BATCH_CONCURRENCY = 3;
+const BATCH_DELAY_MS = 400;
+const MAX_LOG_ENTRIES = 100;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let nodes = [];
+let edges = [];
+let nodeMap = {}; // id → node
+let simulation = null;
+let abortController = null;
+let showLabels = false;
+let activeClusterFilter = null;
+let svgZoom = null;
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const handleInput = document.getElementById('handle-input');
+const searchBtn   = document.getElementById('search-btn');
+const stopBtn     = document.getElementById('stop-btn');
+const statsEmpty  = document.getElementById('stats-empty');
+const statsContent= document.getElementById('stats-content');
+const graphEmpty  = document.getElementById('graph-empty');
+const graphToolbar= document.getElementById('graph-toolbar');
+const graphStatus = document.getElementById('graph-status');
+const graphSvg    = document.getElementById('graph-svg');
+const loadingOverlay = document.getElementById('loading-overlay');
+const progressBar = document.getElementById('progress-bar');
+const progressLabel = document.getElementById('progress-label');
+const logList     = document.getElementById('log-list');
+const logPanel    = document.getElementById('log-panel');
+const logChevron  = document.getElementById('log-chevron');
+const clusterLegend = document.getElementById('cluster-legend');
+const tooltip     = document.getElementById('tooltip');
+const btnPause    = document.getElementById('btn-pause');
+const btnLabels   = document.getElementById('btn-labels');
+const btnResetZoom= document.getElementById('btn-reset-zoom');
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+let logAutoOpened = false;
+function logMsg(msg, level = 'info') {
+  if (!logAutoOpened) {
+    logPanel.classList.add('open');
+    logChevron.classList.add('open');
+    logAutoOpened = true;
+  }
+  const el = document.createElement('div');
+  el.className = 'log-entry' + (level !== 'info' ? ' ' + level : '');
+  const time = new Date().toTimeString().slice(0, 8);
+  el.textContent = `[${time}] ${msg}`;
+  logList.appendChild(el);
+  if (logList.children.length > MAX_LOG_ENTRIES) logList.children[0].remove();
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function updateProgress(done, total, msg) {
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  progressBar.style.width = pct + '%';
+  progressLabel.textContent = msg || `${done} / ${total}`;
+}
+
+// ── Log panel toggle ─────────────────────────────────────────────────────────
+document.getElementById('footer-toggle').addEventListener('click', () => {
+  logPanel.classList.toggle('open');
+  logChevron.classList.toggle('open');
+});
+
+// ── Utility: format numbers ───────────────────────────────────────────────────
+function fmtNum(n) {
+  if (n == null) return '?';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtAge(dateStr) {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(ms / 86400000);
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  if (years > 0) return `${years}y ${months}m`;
+  if (months > 0) return `${months} months`;
+  return `${days} days`;
+}
+
+function dayName(d) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]; }
+
+// ── Fetch with retry + abort ──────────────────────────────────────────────────
+async function fetchJSON(url, signal) {
+  let delay = 2000;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    try {
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal
+      });
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After');
+        const wait = retryAfter ? parseInt(retryAfter, 10) * 1000 : delay;
+        logMsg(`Rate limited by ${new URL(url).hostname}, waiting ${Math.round(wait/1000)}s…`, 'warn');
+        await sleep(wait, signal);
+        delay *= 2;
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      if (attempt === 3) throw err;
+      await sleep(delay, signal);
+      delay *= 2;
+    }
+  }
+}
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(id); reject(new DOMException('Aborted','AbortError')); }, { once: true });
+  });
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function lookupAccount(domain, handle, signal) {
+  const url1 = `https://${domain}/api/v1/accounts/lookup?acct=${encodeURIComponent(handle)}`;
+  try {
+    return await fetchJSON(url1, signal);
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    // Fallback: search
+    const url2 = `https://${domain}/api/v1/search?q=${encodeURIComponent('@' + handle + '@' + domain)}&resolve=true&limit=1`;
+    const res = await fetchJSON(url2, signal);
+    if (res && res.accounts && res.accounts.length > 0) return res.accounts[0];
+    throw new Error('Account not found');
+  }
+}
+
+async function fetchFollowers(domain, accountId, limit, signal) {
+  const url = `https://${domain}/api/v1/accounts/${accountId}/followers?limit=${limit}`;
+  try {
+    const data = await fetchJSON(url, signal);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    return [];
+  }
+}
+
+async function fetchStatuses(domain, accountId, limit, signal) {
+  const url = `https://${domain}/api/v1/accounts/${accountId}/statuses?limit=${limit}&exclude_reblogs=true`;
+  try {
+    const data = await fetchJSON(url, signal);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    return [];
+  }
+}
+
+// ── Graph data helpers ────────────────────────────────────────────────────────
+function acctId(account) {
+  // Normalise to user@domain
+  if (account.acct && account.acct.includes('@')) return account.acct.toLowerCase();
+  const domain = new URL(account.url).hostname;
+  return `${account.username.toLowerCase()}@${domain}`;
+}
+
+function addNode(account, isRoot = false) {
+  const id = acctId(account);
+  if (nodeMap[id]) return nodeMap[id];
+  const domain = account.url ? new URL(account.url).hostname : id.split('@')[1];
+  const node = {
+    id,
+    accountId: account.id,
+    domain,
+    displayName: account.display_name || account.username,
+    username: account.username,
+    followersCount: account.followers_count || 0,
+    followingCount: account.following_count || 0,
+    statusesCount: account.statuses_count || 0,
+    avatarUrl: account.avatar || '',
+    url: account.url || '',
+    isRoot,
+    cluster: 0,
+    corsBlocked: false,
+  };
+  nodes.push(node);
+  nodeMap[id] = node;
+  return node;
+}
+
+function addEdge(sourceId, targetId) {
+  if (sourceId === targetId) return;
+  // dedup
+  const key = sourceId < targetId ? `${sourceId}||${targetId}` : `${targetId}||${sourceId}`;
+  if (addEdge._seen.has(key)) return;
+  addEdge._seen.add(key);
+  edges.push({ source: sourceId, target: targetId });
+}
+addEdge._seen = new Set();
+
+// ── Community detection (label propagation) ───────────────────────────────────
+function detectCommunities(nodes, edges) {
+  const adj = {};
+  for (const n of nodes) adj[n.id] = [];
+  for (const e of edges) {
+    const s = typeof e.source === 'object' ? e.source.id : e.source;
+    const t = typeof e.target === 'object' ? e.target.id : e.target;
+    if (adj[s]) adj[s].push(t);
+    if (adj[t]) adj[t].push(s);
+  }
+
+  const label = {};
+  nodes.forEach((n, i) => { label[n.id] = i; });
+
+  const ids = nodes.map(n => n.id);
+  for (let iter = 0; iter < 30; iter++) {
+    // Shuffle order for better convergence
+    const order = [...ids].sort(() => Math.random() - 0.5);
+    let changed = false;
+    for (const id of order) {
+      const nbrs = adj[id];
+      if (!nbrs || nbrs.length === 0) continue;
+      const count = {};
+      for (const nb of nbrs) {
+        const l = label[nb];
+        count[l] = (count[l] || 0) + 1;
+      }
+      let best = label[id], bestCnt = 0;
+      for (const [l, c] of Object.entries(count)) {
+        if (c > bestCnt || (c === bestCnt && Number(l) < Number(best))) {
+          best = Number(l);
+          bestCnt = c;
+        }
+      }
+      if (best !== label[id]) { label[id] = best; changed = true; }
+    }
+    if (!changed) break;
+  }
+
+  // Re-index clusters to 0,1,2,...
+  const unique = [...new Set(Object.values(label))].sort((a, b) => a - b);
+  const remap = {};
+  unique.forEach((v, i) => { remap[v] = i; });
+  const result = {};
+  for (const [id, l] of Object.entries(label)) result[id] = remap[l];
+  return result;
+}
+
+// ── Stats computation ─────────────────────────────────────────────────────────
+function computeStats(seedAccount, statuses, directFollowers) {
+  const ageDays = Math.max(1, (Date.now() - new Date(seedAccount.created_at).getTime()) / 86400000);
+  const postsPerDay = (seedAccount.statuses_count / ageDays).toFixed(2);
+
+  const dayCounts = new Array(7).fill(0);
+  const hourCounts = new Array(24).fill(0);
+  const langCount = {};
+  for (const s of statuses) {
+    const d = new Date(s.created_at);
+    dayCounts[d.getUTCDay()]++;
+    hourCounts[d.getUTCHours()]++;
+    if (s.language) langCount[s.language] = (langCount[s.language] || 0) + 1;
+  }
+  const topDay = dayCounts.indexOf(Math.max(...dayCounts));
+  const topHour = hourCounts.indexOf(Math.max(...hourCounts));
+  const langTotal = Object.values(langCount).reduce((a, b) => a + b, 0);
+  const topLangs = Object.entries(langCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([l, c]) => `${l} (${Math.round(c / langTotal * 100)}%)`)
+    .join(', ');
+
+  const reach = directFollowers.reduce((s, f) => s + (f.followersCount || 0), 0);
+  const ratio = seedAccount.following_count > 0
+    ? (seedAccount.followers_count / seedAccount.following_count).toFixed(2)
+    : '∞';
+
+  return {
+    followers: seedAccount.followers_count,
+    following: seedAccount.following_count,
+    posts: seedAccount.statuses_count,
+    ratio,
+    age: fmtAge(seedAccount.created_at),
+    postsPerDay,
+    topDay: statuses.length > 0 ? dayName(topDay) : '?',
+    topHour: statuses.length > 0 ? `${topHour}:00 UTC` : '?',
+    langs: topLangs || 'unknown',
+    reach,
+    createdAt: seedAccount.created_at,
+  };
+}
+
+function renderStats(seedAccount, stats) {
+  statsContent.innerHTML = '';
+
+  const profileDiv = document.createElement('div');
+  profileDiv.className = 'profile-header';
+  profileDiv.innerHTML = `
+    <img class="profile-avatar" src="${sanitizeURL(seedAccount.avatar)}" alt="" onerror="this.style.display='none'">
+    <div>
+      <div class="profile-name">${escapeHtml(seedAccount.display_name || seedAccount.username)}</div>
+      <div class="profile-handle">@${escapeHtml(seedAccount.acct || seedAccount.username)}</div>
+      <div class="profile-instance">🌐 ${escapeHtml(new URL(seedAccount.url).hostname)}</div>
+    </div>`;
+  statsContent.appendChild(profileDiv);
+
+  const grid1 = card2col([
+    { icon: '👥', value: fmtNum(stats.followers), label: 'Followers' },
+    { icon: '➡️', value: fmtNum(stats.following), label: 'Following' },
+    { icon: '📝', value: fmtNum(stats.posts), label: 'Posts' },
+    { icon: '⚖️', value: stats.ratio + 'x', label: 'Follower ratio' },
+  ]);
+  statsContent.appendChild(grid1);
+
+  addSectionTitle(statsContent, 'Activity');
+  const grid2 = card2col([
+    { icon: '🗓️', value: stats.age, label: 'Account age' },
+    { icon: '📊', value: stats.postsPerDay, label: 'Posts / day' },
+    { icon: '📅', value: stats.topDay, label: 'Most active day' },
+    { icon: '🕐', value: stats.topHour, label: 'Peak hour (UTC)' },
+    { icon: '🌍', value: stats.langs || '?', label: 'Languages', wide: true },
+  ]);
+  statsContent.appendChild(grid2);
+
+  addSectionTitle(statsContent, 'Graph');
+  const grid3 = card2col([
+    { icon: '🕸️', value: fmtNum(nodes.length), label: 'Accounts mapped' },
+    { icon: '🔗', value: fmtNum(edges.length), label: 'Connections' },
+    { icon: '📡', value: '~' + fmtNum(stats.reach), label: 'Est. reach', wide: true },
+  ]);
+  statsContent.appendChild(grid3);
+
+  statsEmpty.style.display = 'none';
+  statsContent.style.display = 'block';
+}
+
+function card2col(items) {
+  const grid = document.createElement('div');
+  grid.className = 'stats-grid';
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'stat-card' + (item.wide ? ' wide' : '');
+    card.innerHTML = `<span class="stat-icon">${item.icon}</span><div class="stat-value">${escapeHtml(String(item.value))}</div><div class="stat-label">${escapeHtml(item.label)}</div>`;
+    grid.appendChild(card);
+  }
+  return grid;
+}
+
+function addSectionTitle(parent, text) {
+  const el = document.createElement('div');
+  el.className = 'section-title';
+  el.textContent = text;
+  parent.appendChild(el);
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sanitizeURL(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'https:' || u.protocol === 'http:') return url;
+  } catch (_) {}
+  return '';
+}
+
+// ── D3 Graph rendering ────────────────────────────────────────────────────────
+const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
+
+function nodeRadius(d) {
+  const r = Math.max(5, Math.min(20, Math.sqrt((d.followersCount || 1) / 8)));
+  return d.isRoot ? r * 1.8 : r;
+}
+
+function renderGraph(nodesData, edgesData) {
+  // Clear previous
+  d3.select(graphSvg).selectAll('*').remove();
+  clusterLegend.innerHTML = '';
+
+  const wrap = document.getElementById('graph-svg-wrap');
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight;
+
+  const svg = d3.select(graphSvg)
+    .attr('width', W)
+    .attr('height', H);
+
+  const g = svg.append('g');
+
+  // Zoom
+  svgZoom = d3.zoom()
+    .scaleExtent([0.1, 8])
+    .on('zoom', e => g.attr('transform', e.transform));
+  svg.call(svgZoom);
+
+  // Defs: arrowhead (subtle)
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', '0 -4 8 8')
+    .attr('refX', 12)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-4L8,0L0,4')
+    .attr('fill', '#2e3347');
+
+  // Edges
+  const link = g.append('g').attr('class', 'links')
+    .selectAll('line')
+    .data(edgesData)
+    .join('line')
+    .attr('stroke', '#2e3347')
+    .attr('stroke-width', 1)
+    .attr('stroke-opacity', 0.7);
+
+  // Root glow circle
+  const rootNode = nodesData.find(n => n.isRoot);
+
+  // Nodes
+  const nodeGroup = g.append('g').attr('class', 'nodes')
+    .selectAll('g')
+    .data(nodesData)
+    .join('g')
+    .attr('class', 'node-g')
+    .style('cursor', 'pointer')
+    .call(drag(simulation));
+
+  // Outer ring for root
+  nodeGroup.filter(d => d.isRoot)
+    .append('circle')
+    .attr('r', d => nodeRadius(d) + 5)
+    .attr('fill', 'none')
+    .attr('stroke', '#818cf8')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '3 2')
+    .attr('opacity', 0.7);
+
+  // Main circle
+  nodeGroup.append('circle')
+    .attr('r', d => nodeRadius(d))
+    .attr('fill', d => colorScale(d.cluster))
+    .attr('stroke', d => d.isRoot ? '#fff' : 'rgba(0,0,0,0.3)')
+    .attr('stroke-width', d => d.isRoot ? 2 : 1);
+
+  // Labels (hidden by default)
+  const labels = nodeGroup.append('text')
+    .attr('dy', d => -nodeRadius(d) - 4)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '10px')
+    .attr('fill', '#94a3b8')
+    .attr('pointer-events', 'none')
+    .attr('class', 'node-label')
+    .style('display', showLabels ? 'block' : 'none')
+    .text(d => d.username.length > 14 ? d.username.slice(0, 12) + '…' : d.username);
+
+  // CORS blocked badge
+  nodeGroup.filter(d => d.corsBlocked)
+    .append('circle')
+    .attr('r', 4)
+    .attr('cx', d => nodeRadius(d) - 3)
+    .attr('cy', d => -nodeRadius(d) + 3)
+    .attr('fill', '#ef4444');
+
+  // Tooltip events
+  nodeGroup
+    .on('mousemove', (event, d) => {
+      tooltip.classList.add('visible');
+      tooltip.style.left = (event.clientX + 14) + 'px';
+      tooltip.style.top  = (event.clientY - 10) + 'px';
+      document.getElementById('tt-name').textContent = d.displayName;
+      document.getElementById('tt-handle').textContent = `@${d.username}@${d.domain}`;
+      document.getElementById('tt-followers').textContent = fmtNum(d.followersCount);
+      document.getElementById('tt-following').textContent = fmtNum(d.followingCount);
+      document.getElementById('tt-posts').textContent = fmtNum(d.statusesCount);
+    })
+    .on('mouseleave', () => tooltip.classList.remove('visible'))
+    .on('click', (event, d) => { if (d.url) window.open(d.url, '_blank'); });
+
+  // Force simulation
+  simulation = d3.forceSimulation(nodesData)
+    .force('link', d3.forceLink(edgesData).id(d => d.id).distance(70).strength(0.4))
+    .force('charge', d3.forceManyBody().strength(-130))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 3))
+    .alphaDecay(0.02);
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    nodeGroup.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Graph status
+  const clusterCount = new Set(nodesData.map(n => n.cluster)).size;
+  graphStatus.textContent = `${nodesData.length} accounts · ${edgesData.length} connections · ${clusterCount} communities`;
+
+  // Cluster legend
+  buildLegend(nodesData, nodeGroup, link);
+
+  // Pause/resume
+  let paused = false;
+  btnPause.onclick = () => {
+    paused = !paused;
+    if (paused) { simulation.stop(); btnPause.textContent = '▶ Resume'; }
+    else { simulation.restart(); btnPause.textContent = '⏸ Pause'; }
+  };
+
+  btnResetZoom.onclick = () => {
+    svg.transition().duration(500).call(svgZoom.transform, d3.zoomIdentity);
+  };
+
+  btnLabels.onclick = () => {
+    showLabels = !showLabels;
+    nodeGroup.selectAll('.node-label').style('display', showLabels ? 'block' : 'none');
+    btnLabels.textContent = showLabels ? 'Labels on' : 'Labels off';
+  };
+
+  // Handle resize
+  const observer = new ResizeObserver(() => {
+    const nW = wrap.clientWidth, nH = wrap.clientHeight;
+    svg.attr('width', nW).attr('height', nH);
+    simulation.force('center', d3.forceCenter(nW / 2, nH / 2)).alpha(0.1).restart();
+  });
+  observer.observe(wrap);
+}
+
+function buildLegend(nodesData, nodeGroupSel, linkSel) {
+  const clusterMap = {};
+  for (const n of nodesData) {
+    clusterMap[n.cluster] = (clusterMap[n.cluster] || 0) + 1;
+  }
+  const clusters = Object.entries(clusterMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  const label = document.createElement('span');
+  label.className = 'legend-label';
+  label.textContent = 'Communities:';
+  clusterLegend.appendChild(label);
+
+  activeClusterFilter = null;
+
+  for (const [cluster, count] of clusters) {
+    const chip = document.createElement('span');
+    chip.className = 'cluster-chip';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = colorScale(cluster);
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(`Cluster ${Number(cluster)+1} (${count})`));
+    chip.addEventListener('click', () => {
+      if (activeClusterFilter === cluster) {
+        activeClusterFilter = null;
+        document.querySelectorAll('.cluster-chip').forEach(c => c.classList.remove('dimmed'));
+        nodeGroupSel.attr('opacity', 1);
+        linkSel.attr('opacity', 0.7);
+      } else {
+        activeClusterFilter = cluster;
+        document.querySelectorAll('.cluster-chip').forEach(c => {
+          c.classList.toggle('dimmed', c !== chip);
+        });
+        nodeGroupSel.attr('opacity', d => d.cluster == cluster ? 1 : 0.12);
+        linkSel.attr('opacity', d => {
+          const s = typeof d.source === 'object' ? d.source : nodesData.find(n => n.id === d.source);
+          const t = typeof d.target === 'object' ? d.target : nodesData.find(n => n.id === d.target);
+          return (s && s.cluster == cluster) || (t && t.cluster == cluster) ? 0.6 : 0.05;
+        });
+      }
+    });
+    clusterLegend.appendChild(chip);
+  }
+}
+
+function drag(sim) {
+  return d3.drag()
+    .on('start', (event, d) => {
+      if (!event.active && sim) sim.alphaTarget(0.3).restart();
+      d.fx = d.x; d.fy = d.y;
+    })
+    .on('drag', (event, d) => {
+      d.fx = event.x; d.fy = event.y;
+    })
+    .on('end', (event, d) => {
+      if (!event.active && sim) sim.alphaTarget(0);
+      d.fx = null; d.fy = null;
+    });
+}
+
+// ── Promise pool (concurrency limiter) ───────────────────────────────────────
+async function runPool(tasks, concurrency, onProgress) {
+  let idx = 0, done = 0;
+  const total = tasks.length;
+  async function worker() {
+    while (idx < tasks.length) {
+      const task = tasks[idx++];
+      await task();
+      done++;
+      if (onProgress) onProgress(done, total);
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, worker);
+  await Promise.all(workers);
+}
+
+// ── Main pipeline ─────────────────────────────────────────────────────────────
+async function run(rawHandle) {
+  // Reset state
+  nodes = []; edges = [];
+  nodeMap = {}; addEdge._seen = new Set();
+  if (simulation) { simulation.stop(); simulation = null; }
+  activeClusterFilter = null;
+  clusterLegend.innerHTML = '';
+  logList.innerHTML = '';
+  logAutoOpened = false;
+  logPanel.classList.remove('open');
+  logChevron.classList.remove('open');
+  statsContent.style.display = 'none';
+  statsEmpty.style.display = 'flex';
+  graphEmpty.style.display = 'flex';
+  graphToolbar.style.display = 'none';
+  d3.select(graphSvg).selectAll('*').remove();
+  updateProgress(0, 1, 'Starting…');
+
+  // Parse handle
+  const match = rawHandle.trim().match(/^@?([^@\s]+)@([^@\s]+)$/);
+  if (!match) {
+    alert('Please enter a valid handle like @username@instance.social');
+    return;
+  }
+  const [, handle, domain] = match;
+
+  abortController = new AbortController();
+  const signal = abortController.signal;
+
+  searchBtn.disabled = true;
+  stopBtn.classList.add('visible');
+  loadingOverlay.classList.add('visible');
+
+  try {
+    logMsg(`Looking up @${handle}@${domain}…`);
+    updateProgress(0, 10, 'Looking up account…');
+
+    // Phase 1: Seed account
+    const seedAccount = await lookupAccount(domain, handle, signal);
+    logMsg(`Found: ${seedAccount.display_name || seedAccount.username} (${seedAccount.id})`, 'success');
+    const seedNode = addNode(seedAccount, true);
+
+    // Phase 3: Statuses (parallel with followers)
+    logMsg('Fetching posts for stats…');
+    const [followers, statuses] = await Promise.all([
+      // Phase 2: Seed followers
+      (async () => {
+        logMsg(`Fetching up to ${SEED_FOLLOWERS_LIMIT} followers of @${handle}@${domain}…`);
+        return fetchFollowers(domain, seedAccount.id, SEED_FOLLOWERS_LIMIT, signal);
+      })(),
+      fetchStatuses(domain, seedAccount.id, 40, signal)
+    ]);
+
+    logMsg(`Got ${followers.length} direct followers, ${statuses.length} posts`, 'success');
+    updateProgress(2, 10, `Processing ${followers.length} followers…`);
+
+    // Build 1-hop nodes + edges
+    for (const f of followers) {
+      addNode(f);
+      addEdge(acctId(f), seedNode.id);
+    }
+
+    // Phase 4: 2-hop expansion
+    const hop1Nodes = followers.map(f => nodeMap[acctId(f)]).filter(Boolean);
+    let hop2Done = 0;
+    const totalHop2 = hop1Nodes.length;
+
+    logMsg(`Expanding graph (2 hops, up to ${MAX_NODES} total nodes)…`);
+
+    const tasks = hop1Nodes.map(parentNode => async () => {
+      if (signal.aborted) return;
+      if (nodes.length >= MAX_NODES) return;
+
+      try {
+        const hop2Followers = await fetchFollowers(parentNode.domain, parentNode.accountId, HOP2_FOLLOWERS_LIMIT, signal);
+        let added = 0;
+        for (const f of hop2Followers) {
+          if (nodes.length >= MAX_NODES) break;
+          const fId = acctId(f);
+          if (!nodeMap[fId]) addNode(f);
+          addEdge(fId, parentNode.id);
+          added++;
+        }
+        if (hop2Followers.length === 0 && !parentNode.corsBlocked) {
+          // Could be private or empty — that's fine
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        parentNode.corsBlocked = true;
+        logMsg(`Could not fetch followers of @${parentNode.username}@${parentNode.domain}: ${e.message}`, 'warn');
+      }
+
+      hop2Done++;
+      updateProgress(2 + hop2Done, 2 + totalHop2, `Expanded ${hop2Done}/${totalHop2} · ${nodes.length} accounts so far`);
+      // Rate-limit delay between batches
+      await sleep(BATCH_DELAY_MS, signal);
+    });
+
+    await runPool(tasks, BATCH_CONCURRENCY, null);
+
+    if (signal.aborted) return;
+
+    logMsg(`Graph complete: ${nodes.length} nodes, ${edges.length} edges`, 'success');
+    updateProgress(1, 1, `${nodes.length} accounts · ${edges.length} connections`);
+
+    // Community detection
+    logMsg('Detecting communities…');
+    const partition = detectCommunities(nodes, edges);
+    for (const n of nodes) n.cluster = partition[n.id] ?? 0;
+    const clusterCount = new Set(nodes.map(n => n.cluster)).size;
+    logMsg(`Found ${clusterCount} communities`, 'success');
+
+    // Compute + render stats
+    const directFollowerNodes = hop1Nodes;
+    const st = computeStats(seedAccount, statuses, directFollowerNodes);
+    renderStats(seedAccount, st);
+
+    // Render graph
+    graphEmpty.style.display = 'none';
+    graphToolbar.style.display = 'flex';
+    loadingOverlay.classList.remove('visible');
+    renderGraph(nodes, edges);
+
+    // Update graph stats card
+    const graphGrid = statsContent.querySelector('.stats-grid:last-of-type');
+    if (graphGrid) {
+      const cards = graphGrid.querySelectorAll('.stat-card');
+      if (cards[0]) cards[0].querySelector('.stat-value').textContent = fmtNum(nodes.length);
+      if (cards[1]) cards[1].querySelector('.stat-value').textContent = fmtNum(edges.length);
+    }
+
+    logMsg('Done! Click a node to visit their profile.', 'success');
+
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      logMsg('Stopped by user.', 'warn');
+      updateProgress(0, 1, 'Stopped');
+      // Render whatever we have so far
+      if (nodes.length > 1) {
+        logMsg(`Rendering partial graph with ${nodes.length} nodes…`, 'warn');
+        const partition = detectCommunities(nodes, edges);
+        for (const n of nodes) n.cluster = partition[n.id] ?? 0;
+        graphEmpty.style.display = 'none';
+        graphToolbar.style.display = 'flex';
+        renderGraph(nodes, edges);
+      }
+    } else {
+      logMsg(`Error: ${e.message}`, 'error');
+      updateProgress(0, 1, 'Error — check log');
+      alert(`Failed: ${e.message}`);
+    }
+  } finally {
+    searchBtn.disabled = false;
+    stopBtn.classList.remove('visible');
+    loadingOverlay.classList.remove('visible');
+    abortController = null;
+  }
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+document.getElementById('search-form').addEventListener('submit', e => {
+  e.preventDefault();
+  run(handleInput.value);
+});
+
+stopBtn.addEventListener('click', () => {
+  if (abortController) abortController.abort();
+});
+
+// Example handle hint on focus
+handleInput.addEventListener('focus', () => {
+  if (!handleInput.value) handleInput.placeholder = '@username@mastodon.social';
+});
+
+</script>
+</body>
+</html>
