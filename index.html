@@ -100,9 +100,19 @@
       grid-template-columns: 320px 1fr;
       gap: 0;
       overflow: hidden;
+      min-height: 0; /* critical: lets flex children shrink below content size */
     }
     @media (max-width: 900px) {
-      main { grid-template-columns: 1fr; }
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 55vh 1fr; /* graph gets fixed 55vh, stats gets remaining */
+      }
+      #stats-panel {
+        order: 2;
+        border-right: none;
+        border-top: 1px solid var(--border);
+      }
+      #graph-panel { order: 1; }
     }
 
     /* ── Stats Panel ── */
@@ -307,19 +317,40 @@
     }
     #progress-bar-wrap {
       flex: 1;
-      height: 6px;
+      height: 10px;
       background: var(--bg3);
-      border-radius: 3px;
+      border-radius: 5px;
       overflow: hidden;
     }
     #progress-bar {
       height: 100%;
       width: 0%;
       background: var(--accent);
-      border-radius: 3px;
-      transition: width 0.3s;
+      border-radius: 5px;
+      transition: width 0.4s ease;
     }
-    #progress-label { font-size: 0.78rem; color: var(--text3); min-width: 200px; text-align: right; }
+    #progress-bar-wrap.active #progress-bar {
+      background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 50%, var(--accent) 100%);
+      background-size: 200% 100%;
+      animation: barFlow 1.5s linear infinite;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.6);
+    }
+    @keyframes barFlow {
+      0%   { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    #progress-label {
+      font-size: 0.78rem;
+      color: var(--text3);
+      min-width: 140px;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @media (max-width: 900px) {
+      #progress-label { min-width: 0; max-width: 120px; }
+    }
     #log-chevron { color: var(--text3); font-size: 0.8rem; transition: transform 0.2s; }
     #log-chevron.open { transform: rotate(180deg); }
     #log-panel {
@@ -797,6 +828,51 @@ function addSectionTitle(parent, text) {
   parent.appendChild(el);
 }
 
+// Shows profile + basic counts immediately after account lookup, before full stats are ready
+function renderEarlyStats(account) {
+  statsContent.innerHTML = '';
+
+  const profileDiv = document.createElement('div');
+  profileDiv.className = 'profile-header';
+  profileDiv.innerHTML = `
+    <img class="profile-avatar" src="${sanitizeURL(account.avatar)}" alt="" onerror="this.style.display='none'">
+    <div>
+      <div class="profile-name">${escapeHtml(account.display_name || account.username)}</div>
+      <div class="profile-handle">@${escapeHtml(account.acct || account.username)}</div>
+      <div class="profile-instance">🌐 ${escapeHtml(new URL(account.url).hostname)}</div>
+    </div>`;
+  statsContent.appendChild(profileDiv);
+
+  const ratio = account.following_count > 0
+    ? (account.followers_count / account.following_count).toFixed(2)
+    : '∞';
+  const grid = card2col([
+    { icon: '👥', value: fmtNum(account.followers_count), label: 'Followers' },
+    { icon: '➡️', value: fmtNum(account.following_count), label: 'Following' },
+    { icon: '📝', value: fmtNum(account.statuses_count), label: 'Posts' },
+    { icon: '⚖️', value: ratio + 'x', label: 'Follower ratio' },
+    { icon: '🗓️', value: fmtAge(account.created_at), label: 'Account age', wide: true },
+  ]);
+  statsContent.appendChild(grid);
+
+  const note = document.createElement('div');
+  note.id = 'stats-early-note';
+  note.style.cssText = 'padding:14px 0 4px;color:var(--text3);font-size:0.8rem;text-align:center;';
+  note.textContent = '⏳ Loading activity data and follower graph…';
+  statsContent.appendChild(note);
+
+  statsEmpty.style.display = 'none';
+  statsContent.style.display = 'block';
+}
+
+// Assign temporary domain-based clusters so early graph has colour grouping
+function assignClustersByDomain() {
+  const domains = [...new Set(nodes.map(n => n.domain))];
+  const idx = {};
+  domains.forEach((d, i) => { idx[d] = i; });
+  for (const n of nodes) n.cluster = idx[n.domain] ?? 0;
+}
+
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1085,6 +1161,7 @@ async function run(rawHandle) {
   searchBtn.disabled = true;
   stopBtn.classList.add('visible');
   loadingOverlay.classList.add('visible');
+  document.getElementById('progress-bar-wrap').classList.add('active');
 
   try {
     logMsg(`Looking up @${handle}@${domain}…`);
@@ -1095,10 +1172,13 @@ async function run(rawHandle) {
     logMsg(`Found: ${seedAccount.display_name || seedAccount.username} (${seedAccount.id})`, 'success');
     const seedNode = addNode(seedAccount, true);
 
-    // Phase 3: Statuses (parallel with followers)
-    logMsg('Fetching posts for stats…');
+    // ── Show profile + key numbers immediately ────────────────────────────────
+    renderEarlyStats(seedAccount);
+
+    // Phase 2+3: Followers + statuses in parallel
+    logMsg('Fetching followers and posts…');
+    updateProgress(1, 10, 'Fetching followers and posts…');
     const [followers, statuses] = await Promise.all([
-      // Phase 2: Seed followers
       (async () => {
         logMsg(`Fetching up to ${SEED_FOLLOWERS_LIMIT} followers of @${handle}@${domain}…`);
         return fetchFollowers(domain, seedAccount.id, SEED_FOLLOWERS_LIMIT, signal);
@@ -1107,12 +1187,22 @@ async function run(rawHandle) {
     ]);
 
     logMsg(`Got ${followers.length} direct followers, ${statuses.length} posts`, 'success');
-    updateProgress(2, 10, `Processing ${followers.length} followers…`);
+    updateProgress(2, 10, `Building graph from ${followers.length} followers…`);
 
     // Build 1-hop nodes + edges
     for (const f of followers) {
       addNode(f);
       addEdge(acctId(f), seedNode.id);
+    }
+
+    // ── Show graph early with domain-based colouring ──────────────────────────
+    if (nodes.length > 1) {
+      assignClustersByDomain();
+      graphEmpty.style.display = 'none';
+      graphToolbar.style.display = 'flex';
+      loadingOverlay.classList.remove('visible');
+      renderGraph(nodes, edges);
+      logMsg(`Showing ${nodes.length - 1} direct followers, expanding to 2 hops…`, 'success');
     }
 
     // Phase 4: 2-hop expansion
@@ -1190,13 +1280,14 @@ async function run(rawHandle) {
     if (e.name === 'AbortError') {
       logMsg('Stopped by user.', 'warn');
       updateProgress(0, 1, 'Stopped');
-      // Render whatever we have so far
+      // Render whatever we have so far (with proper community colours)
       if (nodes.length > 1) {
         logMsg(`Rendering partial graph with ${nodes.length} nodes…`, 'warn');
         const partition = detectCommunities(nodes, edges);
         for (const n of nodes) n.cluster = partition[n.id] ?? 0;
         graphEmpty.style.display = 'none';
         graphToolbar.style.display = 'flex';
+        loadingOverlay.classList.remove('visible');
         renderGraph(nodes, edges);
       }
     } else {
@@ -1208,6 +1299,7 @@ async function run(rawHandle) {
     searchBtn.disabled = false;
     stopBtn.classList.remove('visible');
     loadingOverlay.classList.remove('visible');
+    document.getElementById('progress-bar-wrap').classList.remove('active');
     abortController = null;
   }
 }
